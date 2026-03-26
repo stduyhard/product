@@ -5,3 +5,8 @@ __pycache__/
 .pytest_cache/
 output/
 data/test-tmp/
+*.log
+data/knowledge_base.vector/
+data/knowledge_base.vector.bin/
+data/*.meta.json
+data/jd_dom_*.json

@@ -1,33 +1,58 @@
 # 泡脚桶产品调研与本地 AI 客服 MVP
 
-这是一个围绕 `泡脚桶` 产品搭建的 MVP 项目，包含两条主线：
+这是一个围绕`泡脚桶`产品搭建的 MVP 项目，主线分为两部分：
 
-1. 电商数据采集与市场调研
-2. 本地 AI 客服机器人
+1. 电商数据采集、清洗、入库与市场分析
+2. 本地 AI 客服机器人问答与知识库检索
 
-当前版本已经支持：
+项目当前已经可以完成：
+- 京东泡脚桶真实商品小样本采集
+- 飞书多维表自动写入
+- 自动生成市场调研报告、汇报简版、仪表盘摘要
+- 基于 LangChain + DeepSeek + Chroma 的本地客服机器人
+- 本地 `/chat` 接口问答
+- 多轮对话记忆
 
-- 京东泡脚桶商品小样本采集
-- 飞书多维表写入
+## 产品能力
+
+### 1. 市场调研链路
+- 从京东抓取泡脚桶商品数据
+- 标准化商品字段，如标题、品牌、价格、链接、店铺名、图片等
+- 自动写入飞书多维表
 - 自动生成市场调研报告
-- 自动生成汇报简版与仪表盘摘要
-- 生成本地知识库
-- 基于 `LangChain RAG + DeepSeek` 的本地客服机器人
+- 自动生成汇报简版和仪表盘摘要数据
+- 输出本地知识库，供客服机器人复用
 
-## 目录说明
+### 2. AI 本地客服机器人
+- 本地部署，基于 FastAPI 提供接口
+- 使用 LangChain 组织 RAG 问答链路
+- 使用 DeepSeek 作为大模型能力
+- 使用 Chroma 做本地持久化向量库
+- 支持多轮对话记忆
+- 支持本地 `/chat` 直接提问
 
-- `run_mvp.py`：主流程入口
+## 技术栈
+- Python 3.13
+- FastAPI
+- Playwright
+- LangChain
+- langchain-openai
+- DeepSeek（通过 ChatOpenAI 兼容接入）
+- Chroma
+- 飞书多维表 API
+
+## 目录结构
+- `run_mvp.py`：市场调研主流程入口
 - `app/collector/`：京东/天猫采集与清洗
 - `app/sync/`：飞书多维表同步
 - `app/analysis/`：统计分析与 AI 总结
-- `app/report/`：报告、汇报简版、仪表盘数据生成
-- `app/bot/`：本地机器人、知识库、RAG 问答服务
-- `config/keywords.json`：默认关键词
-- `output/`：报告与仪表盘输出目录
-- `data/knowledge_base.json`：本地知识库文件
+- `app/report/`：市场报告、汇报简版、仪表盘摘要生成
+- `app/bot/`：本地客服机器人、知识库、RAG 问答服务
+- `config/keywords.json`：默认关键词配置
+- `data/knowledge_base.json`：本地知识库数据
+- `output/`：报告与摘要输出目录
 
 ## 环境准备
-
 建议 Python 3.13。
 
 安装依赖：
@@ -38,11 +63,9 @@ python -m playwright install chromium
 ```
 
 ## 环境变量
+项目通过 `.env` 读取配置。
 
-项目通过 `.env` 读取配置。你至少需要准备以下内容：
-
-### 1. 飞书多维表
-
+### 飞书多维表
 - `FEISHU_APP_ID`
 - `FEISHU_APP_SECRET`
 - `FEISHU_APP_TOKEN`
@@ -50,8 +73,7 @@ python -m playwright install chromium
 - `FEISHU_TABLE_JOBS`
 - `FEISHU_USE_CN_FIELDS=1`
 
-### 2. 京东浏览器抓取
-
+### 京东浏览器抓取
 - `COLLECTOR_MODE=web`
 - `COLLECTOR_PLATFORMS=jd`
 - `COLLECTOR_PER_PLATFORM_LIMIT=20`
@@ -60,39 +82,32 @@ python -m playwright install chromium
 - `BROWSER_HEADLESS=0`
 - `BROWSER_CDP_PORT=9222`
 
-### 3. DeepSeek / LangChain
-
+### DeepSeek / LangChain
 - `OPENAI_API_KEY`
 - `OPENAI_BASE_URL`
 - `OPENAI_MODEL`
 - `BOT_VECTOR_CACHE_PATH`
 
 说明：
-
-- 当前项目使用 `langchain-openai` 的 `ChatOpenAI` 兼容 DeepSeek。
-- 只要 `OPENAI_BASE_URL` 和 `OPENAI_API_KEY` 配好，就能跑 AI 分析与机器人问答。
-- `BOT_VECTOR_CACHE_PATH` 用于持久化本地 Chroma 向量库，机器人重启时可直接复用。
+- 项目使用 `langchain-openai` 的 `ChatOpenAI` 兼容 DeepSeek。
+- `BOT_VECTOR_CACHE_PATH` 用于持久化本地 Chroma 向量库。
 
 ## 京东抓取前准备
-
-为了提高京东页面抓取成功率，建议先用调试端口启动 Chrome：
+建议先用调试端口启动 Chrome：
 
 ```powershell
 & "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="D:\chrome-cdp-profile"
 ```
 
-然后在这个 Chrome 里：
-
+然后在该 Chrome 中：
 1. 登录京东
 2. 打开泡脚桶搜索页
 3. 确认能看到商品列表
 
 推荐页面：
-
 [https://search.jd.com/Search?keyword=%E6%B3%A1%E8%84%9A%E6%A1%B6](https://search.jd.com/Search?keyword=%E6%B3%A1%E8%84%9A%E6%A1%B6)
 
 ## 运行市场调研主流程
-
 执行：
 
 ```powershell
@@ -100,16 +115,14 @@ python run_mvp.py
 ```
 
 成功后会输出：
+- `output/market_report.md`
+- `output/executive_brief.md`
+- `output/dashboard_summary.json`
+- `data/knowledge_base.json`
 
-- 市场报告：[`output/market_report.md`](D:\python-code\produtct_ai\output\market_report.md)
-- 汇报简版：[`output/executive_brief.md`](D:\python-code\produtct_ai\output\executive_brief.md)
-- 仪表盘摘要：[`output/dashboard_summary.json`](D:\python-code\produtct_ai\output\dashboard_summary.json)
-- 本地知识库：[`data/knowledge_base.json`](D:\python-code\produtct_ai\data\knowledge_base.json)
+同时会将商品记录和任务日志同步到飞书多维表。
 
-同时会将商品记录与任务日志同步到飞书多维表。
-
-## 启动本地机器人
-
+## 启动本地客服机器人
 执行：
 
 ```powershell
@@ -123,15 +136,14 @@ curl http://127.0.0.1:8001/health
 ```
 
 ## 本地问答接口
+### 推荐接口：`/chat`
 
-### 推荐：直接使用 `/chat`
-
-请求：
+请求示例：
 
 ```powershell
 curl -Method POST http://127.0.0.1:8001/chat `
   -ContentType "application/json" `
-  -Body '{"text":"泡脚桶怎么选？"}'
+  -Body '{"text":"泡脚桶怎么选？","session_id":"demo-001"}'
 ```
 
 返回格式：
@@ -140,9 +152,12 @@ curl -Method POST http://127.0.0.1:8001/chat `
 {"text":"..."}
 ```
 
-### 兼容接口：`/feishu/webhook`
+说明：
+- `session_id` 可选
+- 相同 `session_id` 会启用多轮对话记忆
 
-如果仍需要兼容飞书事件格式，可以继续调用：
+### 兼容接口：`/feishu/webhook`
+如果后续仍需要兼容飞书事件格式，可以继续调用：
 
 ```powershell
 curl -Method POST http://127.0.0.1:8001/feishu/webhook `
@@ -150,33 +165,26 @@ curl -Method POST http://127.0.0.1:8001/feishu/webhook `
   -Body '{"token":"dev-token","event":{"text":"泡脚桶怎么选？"}}'
 ```
 
-## 机器人技术栈
+## 机器人问答链路
+当前机器人采用标准 LangChain RAG 结构：
 
-当前机器人不是简单的请求转发，而是标准的 `LangChain RAG` 结构：
+`Knowledge Base -> Retriever -> Chroma -> Prompt -> DeepSeek -> Answer`
 
-- 本地知识库
-- Retriever
-- Embeddings
-- Chroma
-- ChatPromptTemplate
-- DeepSeek（通过 `ChatOpenAI` 接入）
-- StrOutputParser
-
-也就是说，当前问答链路是：
-
-`Knowledge Base -> Retriever -> Prompt -> LLM -> Answer`
+并支持：
+- 本地知识库检索
+- Chroma 持久化向量库
+- 多轮对话记忆
+- 本地 FastAPI 服务
 
 ## 建议演示顺序
-
-1. 启动带 `9222` 的 Chrome 并打开京东搜索页
-2. 运行 `python run_mvp.py`
+1. 启动带 `9222` 调试端口的 Chrome 并打开京东泡脚桶搜索页
+2. 执行 `python run_mvp.py`
 3. 打开飞书多维表查看商品数据
 4. 打开报告文件查看市场结论
 5. 启动本地机器人
-6. 用 `/chat` 提问演示产品咨询问答
+6. 用 `/chat` 演示客服问答
 
-## 当前已完成能力
-
+## 当前已完成
 - 京东泡脚桶商品采集
 - 飞书多维表写入
 - 市场调研报告生成
@@ -184,18 +192,18 @@ curl -Method POST http://127.0.0.1:8001/feishu/webhook `
 - 仪表盘摘要生成
 - 本地知识库生成
 - LangChain RAG 本地客服机器人
-- 本地 `/chat` 问答接口
+- Chroma 持久化向量检索
+- `/chat` 本地问答接口
+- 多轮对话记忆
 
 ## 已知限制
+- 当前演示主线聚焦京东小样本
+- 京东网页结构变化可能影响抓取稳定性
+- 飞书字段读取权限仍可能受 Base 内部权限控制
+- 当前更适合单机演示与 MVP 交付
 
-- 当前演示主线聚焦京东，小样本为主
-- 京东网页结构可能变化，抓取依赖当前页面可见性
-- 飞书表字段读取权限可能受到 Base 内部权限限制
-- 当前向量库使用本地 `Chroma` 持久化目录，适合单机演示与本地复用
-
-## 后续可继续增强
-
-1. 增加多轮对话记忆与会话管理
-2. 接入天猫真实抓取
-3. 增强品牌、价格带、卖点交叉分析
+## 后续可增强方向
+1. 接入天猫真实抓取
+2. 增强品牌、价格带、卖点交叉分析
+3. 增加更完整的任务调度与监控
 4. 增加更适合汇报的可视化页面
