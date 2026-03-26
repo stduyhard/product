@@ -1,6 +1,6 @@
 # 泡脚桶产品调研与本地 AI 客服 MVP
 
-> 一个围绕「泡脚桶」类目搭建的 MVP 项目，包含电商市调与本地 AI 客服两条主线。
+> 一个围绕“泡脚桶”类目搭建的 MVP 项目，包含电商市调与本地 AI 客服两条主线。
 
 ## 项目效果
 
@@ -38,6 +38,22 @@
 - `output/executive_brief.md`：一页式汇报简版
 - `output/dashboard_summary.json`：仪表盘摘要数据
 - `data/knowledge_base.json`：机器人本地知识库
+
+## 项目架构图
+
+```mermaid
+flowchart LR
+    A[京东商品页] --> B[采集与清洗]
+    B --> C[飞书多维表]
+    B --> D[市场分析与报告]
+    D --> E[知识库构建]
+    E --> F[Chroma 向量库]
+    G[用户问题] --> H[FastAPI /chat]
+    H --> I[LangChain RAG]
+    F --> I
+    I --> J[DeepSeek]
+    J --> K[客服回答]
+```
 
 ## 技术栈
 - Python 3.13
@@ -179,3 +195,7 @@ curl -Method POST http://127.0.0.1:8001/feishu/webhook `
 2. 增强品牌、价格带、卖点交叉分析
 3. 增加更完整的任务调度与监控
 4. 增加更适合汇报的可视化页面
+
+## License
+
+本项目采用 [MIT License](./LICENSE)。
