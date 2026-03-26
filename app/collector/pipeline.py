@@ -1,16 +1,31 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any, Protocol
 
 from app.collector.normalizer import normalize_record
 from app.collector.sources import JDCollector, TmallCollector
 from app.models import JobResult, ProductRecord
 
 
+class _Collector(Protocol):
+    platform: str
+    config: Any
+
+    def collect(self, keyword: str) -> list[dict[str, object]]: ...
+
+
 def collect_products(
-    keywords: list[str], per_platform_limit: int = 100
+    keywords: list[str],
+    per_platform_limit: int = 100,
+    platforms: list[str] | None = None,
 ) -> tuple[list[ProductRecord], list[JobResult]]:
-    collectors = [JDCollector(), TmallCollector()]
+    selected_platforms = {item.strip().lower() for item in (platforms or ["jd", "tmall"])}
+    collectors: list[_Collector] = []
+    if "jd" in selected_platforms:
+        collectors.append(JDCollector())
+    if "tmall" in selected_platforms:
+        collectors.append(TmallCollector())
     records: list[ProductRecord] = []
     jobs: list[JobResult] = []
 

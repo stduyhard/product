@@ -1,11 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import random
 import re
 from dataclasses import dataclass
 from typing import Any, cast
-from urllib.parse import quote_plus
+from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -183,6 +183,27 @@ def _should_close_browser_resources(mode: str) -> bool:
 
 
 
+def _locate_existing_search_page(
+    contexts: list[Any],
+    platform: str,
+    keyword: str,
+) -> Any | None:
+    target_url = _build_search_url(platform, keyword)
+    for context in contexts:
+        for page in context.pages:
+            if page.url == target_url:
+                return page
+            if platform == "jd" and "search.jd.com/Search" in page.url:
+                return page
+    return None
+
+
+
+def _needs_new_page(page: Any | None, mode: str) -> bool:
+    return page is None or mode != "cdp"
+
+
+
 def _fetch_browser_html(platform: str, keyword: str) -> str:
     try:
         from playwright.sync_api import Error as PlaywrightError
@@ -195,6 +216,7 @@ def _fetch_browser_html(platform: str, keyword: str) -> str:
     try:
         with sync_playwright() as p:
             browser = None
+            page = None
             mode = _browser_connection_mode()
             if mode == "cdp":
                 browser = p.chromium.connect_over_cdp(_browser_cdp_endpoint())
@@ -202,6 +224,7 @@ def _fetch_browser_html(platform: str, keyword: str) -> str:
                     user_agent=settings.crawler_user_agent,
                     locale="zh-CN",
                 )
+                page = _locate_existing_search_page(browser.contexts, platform, keyword)
             elif mode == "persistent":
                 context = p.chromium.launch_persistent_context(
                     settings.browser_user_data_dir,
@@ -218,12 +241,15 @@ def _fetch_browser_html(platform: str, keyword: str) -> str:
             cookies = _browser_cookies(platform)
             if cookies:
                 context.add_cookies(cast(Any, cookies))
-            page = context.new_page()
-            page.goto(
-                url,
-                wait_until="domcontentloaded",
-                timeout=settings.request_timeout_sec * 1000,
-            )
+            if _needs_new_page(page, mode):
+                page = context.new_page()
+                page.goto(
+                    url,
+                    wait_until="domcontentloaded",
+                    timeout=settings.request_timeout_sec * 1000,
+                )
+            if page is None:
+                raise RuntimeError("browser page initialization failed")
             page.wait_for_timeout(3000)
             if platform == "jd":
                 try:
@@ -316,6 +342,10 @@ def _parse_jd_html(html: str, keyword: str, limit: int) -> list[dict[str, Any]]:
     if items:
         return items
 
+    items = _parse_jd_new_card_layout(soup, keyword, limit)
+    if items:
+        return items
+
     for match in re.finditer(r"jQuery\d+\((\{.*?\})\)\s*;", html, flags=re.DOTALL):
         try:
             payload = json.loads(match.group(1))
@@ -327,6 +357,112 @@ def _parse_jd_html(html: str, keyword: str, limit: int) -> list[dict[str, Any]]:
             return parsed
 
     return []
+
+
+def _parse_jd_new_card_layout(
+    soup: BeautifulSoup,
+    keyword: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for node in soup.select("[data-sku]"):
+        if len(items) >= limit:
+            break
+
+        product_id = str(node.get("data-sku") or "")
+        if not product_id:
+            continue
+
+        chat_link = node.select_one('a[href*="chat.jd.com"]')
+        chat_href = str(chat_link.get("href") or "") if chat_link else ""
+        query = parse_qs(urlparse(_normalize_url(chat_href)).query)
+
+        title = _decode_jd_query_value(query, "wname")
+        if not title:
+            title_node = node.select_one('span[class*="_text_"]')
+            if title_node:
+                title = str(
+                    title_node.get("title") or title_node.get_text(strip=True) or ""
+                )
+
+        shop_name = _decode_jd_query_value(query, "seller")
+        if not shop_name:
+            shop_node = node.select_one('span[class*="_name_"] span')
+            shop_name = shop_node.get_text(strip=True) if shop_node else ""
+
+        image_node = node.select_one("img[data-src], img[src]")
+        image_url = ""
+        if image_node:
+            image_url = str(image_node.get("data-src") or image_node.get("src") or "")
+            image_url = _normalize_url(image_url)
+
+        price_node = node.select_one('span[class*="_price_"]')
+        price_current = _extract_price(
+            price_node.get_text(" ", strip=True) if price_node else ""
+        )
+
+        price_original_node = node.select_one('span[class*="_gray_"]')
+        price_original = _extract_price(
+            price_original_node.get_text(" ", strip=True) if price_original_node else ""
+        )
+
+        sales_node = node.select_one('span[class*="_goods_volume_"] [title]') or node.select_one(
+            'span[class*="_goods_volume_"] span'
+        )
+        sales_value = ""
+        if sales_node:
+            sales_title = sales_node.get("title")
+            sales_value = (
+                str(sales_title)
+                if sales_title is not None
+                else sales_node.get_text(strip=True)
+            )
+        sales_or_reviews = _extract_numeric_volume(sales_value)
+
+        if title:
+            items.append(
+                {
+                    "product_id": product_id,
+                    "title": title,
+                    "brand": _guess_brand(title),
+                    "price_current": price_current,
+                    "price_original": price_original or None,
+                    "image_url": image_url,
+                    "product_url": f"https://item.jd.com/{product_id}.html",
+                    "shop_name": shop_name,
+                    "shop_type": _shop_type(shop_name),
+                    "sales_or_reviews": sales_or_reviews,
+                    "heating_type": "unknown",
+                    "core_features": [],
+                    "rating": None,
+                    "keyword": keyword,
+                }
+            )
+    return items
+
+
+def _decode_jd_query_value(query: dict[str, list[str]], key: str) -> str:
+    values = query.get(key, [])
+    if not values:
+        return ""
+    value = values[0]
+    # JD chat links often carry doubly-encoded UTF-8 strings.
+    for _ in range(2):
+        if "%" not in value:
+            break
+        value = unquote(value)
+    return value.strip()
+
+
+def _extract_numeric_volume(raw: str | None) -> int:
+    text = str(raw or "").replace("+", "")
+    matched = re.search(r"(\d+(?:\.\d+)?)", text)
+    if not matched:
+        return 0
+    number = float(matched.group(1))
+    if "万" in text:
+        number *= 10000
+    return int(number)
 
 
 
@@ -452,7 +588,8 @@ def _normalize_url(url: str) -> str:
 
 
 def _extract_price(raw: str) -> float:
-    matched = re.search(r"(\d+(?:\.\d+)?)", raw)
+    normalized = re.sub(r"\s*\.\s*", ".", raw)
+    matched = re.search(r"(\d+(?:\.\d+)?)", normalized)
     if not matched:
         return 0.0
     return float(matched.group(1))

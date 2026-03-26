@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 
-def build_report(metrics: dict[str, Any], output_path: str) -> str:
+def build_report(metrics: dict[str, Any], output_path: str, ai_summary: str = "") -> str:
     lines = [
         "# 泡脚桶市场调研报告（MVP）",
         "",
@@ -15,7 +15,7 @@ def build_report(metrics: dict[str, Any], output_path: str) -> str:
         "## 关键结论",
         "- 建议主价格带：200-399 元。",
         "- 核心功能卖点优先级：恒温、排水、按摩。",
-        "- 产品线建议：入门款（价格）+主力款（功能平衡）+高配款（体验升级）。",
+        "- 产品线建议：入门款（性价比）+主力款（功能平衡）+高配款（体验升级）。",
         "",
         "## 品牌分布 TOP",
     ]
@@ -31,8 +31,23 @@ def build_report(metrics: dict[str, Any], output_path: str) -> str:
 
     lines.extend(["", "## 功能词覆盖"])
     feature_coverage = metrics.get("feature_coverage", {})
-    for feature, count in feature_coverage.items():
-        lines.append(f"- {feature}: {count}")
+    if feature_coverage:
+        for feature, count in feature_coverage.items():
+            lines.append(f"- {feature}: {count}")
+    else:
+        lines.append("- 当前样本尚未沉淀出稳定功能词，可继续补充商品参数后再统计。")
+
+    lines.extend(["", "## 运营建议"])
+    lines.extend(
+        [
+            "- 详情页优先突出恒温、安全、排水清洁等高频关注点。",
+            "- 价格 200-399 元区间适合作为主推款，搭配 399 元以上高配款做锚点。",
+            "- 自营旗舰店样本占比较高，后续需要持续关注头部品牌的套餐和赠品策略。",
+        ]
+    )
+
+    if ai_summary.strip():
+        lines.extend(["", "## AI分析结论", ai_summary.strip()])
 
     content = "\n".join(lines)
     path = Path(output_path)

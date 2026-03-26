@@ -1,9 +1,11 @@
-﻿from app.collector.sources import (
+from app.collector.sources import (
     _adapt_external_item,
     _browser_cdp_endpoint,
     _browser_connection_mode,
     _browser_cookies,
     _build_search_url,
+    _locate_existing_search_page,
+    _needs_new_page,
     _parse_jd_html,
     _should_close_browser_resources,
 )
@@ -36,6 +38,33 @@ def test_parse_jd_html_extracts_items():
     assert rows[0]["price_current"] == 299.0
     assert rows[0]["shop_type"] == "flagship"
     assert rows[0]["product_url"].startswith("https://")
+
+
+def test_parse_jd_html_extracts_new_card_layout():
+    html = """
+    <div data-sku="100117484513" class="_wrapper_1v6qy_3 plugin_goodsCardWrapper">
+      <img class="_img_18s24_1" data-src="//img13.360buyimg.com/demo.jpg" />
+      <span class="_text_1g56m_31" title="乱码标题">乱码标题</span>
+      <span class="_price_d0rf6_14">
+        <i>￥</i>368<span>.</span><span class="_decimal_d0rf6_28">09</span>
+      </span>
+      <span class="_gray_d0rf6_61">￥399</span>
+      <span class="_goods_volume_1xkku_1"><span title="已售20万+">已售20万+</span></span>
+      <span class="_name_b6zo3_45"><span>乱码店铺</span></span>
+      <a target="_blank"
+         href="//chat.jd.com/index.action?pid=100117484513&seller=%25E7%25BE%258E%25E7%259A%2584%25E4%25BA%25AC%25E4%25B8%259C%25E8%2587%25AA%25E8%2590%25A5%25E6%2597%2597%25E8%2588%25B0%25E5%25BA%2597&wname=%25E7%25BE%258E%25E7%259A%2584ZL310%25E8%25B6%25B3%25E6%25B5%25B4%25E7%259B%2586%25E6%258C%2589%25E6%2591%25A9%25E6%259D%2580%25E8%258F%258C%25E5%258A%25A0%25E7%2583%25AD">
+      </a>
+    </div>
+    """
+    rows = _parse_jd_html(html, keyword="泡脚桶", limit=10)
+    assert len(rows) == 1
+    assert rows[0]["product_id"] == "100117484513"
+    assert rows[0]["title"] == "美的ZL310足浴盆按摩杀菌加热"
+    assert rows[0]["shop_name"] == "美的京东自营旗舰店"
+    assert rows[0]["price_current"] == 368.09
+    assert rows[0]["price_original"] == 399.0
+    assert rows[0]["product_url"] == "https://item.jd.com/100117484513.html"
+    assert rows[0]["image_url"] == "https://img13.360buyimg.com/demo.jpg"
 
 
 def test_adapt_external_item_maps_common_fields():
@@ -123,3 +152,48 @@ def test_cdp_mode_does_not_close_existing_browser_resources():
     assert _should_close_browser_resources("cdp") is False
     assert _should_close_browser_resources("persistent") is True
     assert _should_close_browser_resources("ephemeral") is True
+
+
+def test_locate_existing_search_page_reuses_matching_tab():
+    class FakePage:
+        def __init__(self, url: str):
+            self.url = url
+
+    class FakeContext:
+        def __init__(self, pages):
+            self.pages = pages
+
+    url = _build_search_url("jd", "???")
+    contexts = [FakeContext([FakePage("https://example.com"), FakePage(url)])]
+
+    page = _locate_existing_search_page(contexts, "jd", "???")
+    assert page is not None
+    assert page.url == url
+
+
+def test_needs_new_page_is_false_when_existing_search_page_found():
+    class FakePage:
+        def __init__(self, url: str):
+            self.url = url
+
+    url = _build_search_url("jd", "???")
+    assert _needs_new_page(FakePage(url), "cdp") is False
+    assert _needs_new_page(None, "cdp") is True
+    assert _needs_new_page(None, "ephemeral") is True
+
+
+def test_locate_existing_search_page_matches_keyword_variant_url():
+    class FakePage:
+        def __init__(self, url: str):
+            self.url = url
+
+    class FakeContext:
+        def __init__(self, pages):
+            self.pages = pages
+
+    variant_url = "https://search.jd.com/Search?keyword=%E6%B3%A1%E8%84%9A%E6%A1%B6&page=3&s=61"
+    contexts = [FakeContext([FakePage(variant_url)])]
+
+    page = _locate_existing_search_page(contexts, "jd", "???")
+    assert page is not None
+    assert page.url == variant_url
