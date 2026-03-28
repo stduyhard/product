@@ -28,6 +28,10 @@ class BaseCollector:
         raise NotImplementedError
 
 
+class CollectorPageStateError(RuntimeError):
+    """Raised when the crawler lands on a login or verification page."""
+
+
 class ExternalApiCollector(BaseCollector):
     api_url = ""
 
@@ -57,6 +61,9 @@ class TmallCollector(ExternalApiCollector):
 def _collect_web_only(platform: str, keyword: str, limit: int) -> list[dict[str, Any]]:
     try:
         return _fetch_web_items(platform, keyword, limit)
+    except CollectorPageStateError as exc:
+        print(f"[collector:{platform}] {exc}")
+        return []
     except requests.RequestException as exc:
         print(f"[collector:{platform}] web crawl failed: {exc}")
         return []
@@ -85,6 +92,8 @@ def _collect_auto(api_url: str, platform: str, keyword: str, limit: int) -> list
         web_items = _fetch_web_items(platform, keyword, limit)
         if web_items:
             return web_items
+    except CollectorPageStateError as exc:
+        print(f"[collector:{platform}] {exc}")
     except requests.RequestException as exc:
         print(f"[collector:{platform}] web crawl failed in auto mode: {exc}")
 
@@ -123,6 +132,9 @@ def _fetch_web_items(platform: str, keyword: str, limit: int) -> list[dict[str, 
         html = _fetch_requests_html(platform, keyword)
 
     if platform == "jd":
+        issue = _jd_page_issue_message(html)
+        if issue is not None:
+            raise CollectorPageStateError(issue)
         return _parse_jd_html(html, keyword, limit)
     if platform == "tmall":
         return _parse_tmall_html(html, keyword, limit)
@@ -279,6 +291,32 @@ def _fetch_requests_html(platform: str, keyword: str) -> str:
     response.encoding = response.apparent_encoding or response.encoding or "utf-8"
     return response.text
 
+
+
+def _jd_page_issue_message(html: str) -> str | None:
+    normalized = html.lower()
+    login_markers = [
+        "京东-欢迎登录",
+        "登录京东",
+        "扫码登录",
+        "passport.jd.com",
+        "欢迎登录",
+    ]
+    verification_markers = [
+        "验证中心",
+        "安全验证",
+        "验证码",
+        "异常访问",
+    ]
+
+    if any(marker.lower() in normalized for marker in login_markers):
+        return "JD_COOKIE 可能已失效，当前页面回到了登录页，请重新登录京东或更新 JD_COOKIE。"
+    if any(marker.lower() in normalized for marker in verification_markers):
+        return (
+            "京东当前返回了验证页，可能触发了风控。"
+            "请重新登录京东，并在浏览器里确认可以正常看到商品列表。"
+        )
+    return None
 
 
 def _build_search_url(platform: str, keyword: str) -> str:

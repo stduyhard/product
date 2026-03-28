@@ -10,3 +10,6 @@ data/knowledge_base.vector/
 data/knowledge_base.vector.bin/
 data/*.meta.json
 data/jd_dom_*.json
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/

@@ -197,3 +197,58 @@ def test_locate_existing_search_page_matches_keyword_variant_url():
     page = _locate_existing_search_page(contexts, "jd", "???")
     assert page is not None
     assert page.url == variant_url
+
+
+
+def test_jd_page_issue_detects_login_page():
+    from app.collector.sources import _jd_page_issue_message
+
+    html = """
+    <html>
+      <head><title>京东-欢迎登录</title></head>
+      <body>
+        <div>登录京东</div>
+        <div>扫码登录</div>
+      </body>
+    </html>
+    """
+
+    message = _jd_page_issue_message(html)
+    assert message is not None
+    assert "JD_COOKIE" in message
+    assert "登录页" in message
+
+
+def test_jd_page_issue_detects_verification_page():
+    from app.collector.sources import _jd_page_issue_message
+
+    html = """
+    <html>
+      <head><title>京东验证中心</title></head>
+      <body>
+        <div>验证码</div>
+        <div>安全验证</div>
+      </body>
+    </html>
+    """
+
+    message = _jd_page_issue_message(html)
+    assert message is not None
+    assert "验证" in message
+
+
+
+def test_collect_web_only_prints_clear_message_for_jd_session_issue(capsys, monkeypatch):
+    from app.collector import sources
+
+    def fake_fetch(platform: str, keyword: str, limit: int):
+        raise sources.CollectorPageStateError("JD_COOKIE ?????????????????????????")
+
+    monkeypatch.setattr(sources, "_fetch_web_items", fake_fetch)
+
+    rows = sources._collect_web_only("jd", "???", 20)
+    captured = capsys.readouterr()
+
+    assert rows == []
+    assert "JD_COOKIE" in captured.out
+    assert "??????" in captured.out
