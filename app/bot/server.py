@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -50,6 +53,7 @@ if settings.ai_enabled:
         cache_path=settings.bot_vector_cache_path,
     )
 bot = ai_responder or ProductConsultingBot("data/knowledge_base.json")
+DASHBOARD_PATH = Path("output/dashboard_summary.json")
 
 
 @app.get("/health")
@@ -88,3 +92,26 @@ def chat(payload: ChatMessage) -> JSONResponse:
         content={"text": answer},
         media_type="application/json; charset=utf-8",
     )
+
+@app.get("/dashboard/summary")
+def dashboard_summary() -> JSONResponse:
+    if not DASHBOARD_PATH.exists():
+        return JSONResponse(
+            content={
+                "summary": {"total": 0, "avg_price": 0},
+                "charts": {
+                    "brand_top": [],
+                    "price_band": [],
+                    "feature_coverage": [],
+                    "shop_type_share": [],
+                },
+            },
+            media_type="application/json; charset=utf-8",
+        )
+
+    payload = json.loads(DASHBOARD_PATH.read_text(encoding="utf-8"))
+    return JSONResponse(
+        content=payload,
+        media_type="application/json; charset=utf-8",
+    )
+

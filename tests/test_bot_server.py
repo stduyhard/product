@@ -91,3 +91,22 @@ def test_chat_endpoint_returns_cors_headers_for_vue_dev_server():
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+
+
+
+def test_dashboard_summary_endpoint_returns_snapshot(tmp_path, monkeypatch):
+    dashboard_file = tmp_path / "dashboard_summary.json"
+    dashboard_file.write_text(
+        '{"summary":{"total":12,"avg_price":288.5},"charts":{"brand_top":[{"brand":"midea","count":5}],"price_band":[{"band":"200-399","count":7}],"feature_coverage":[{"feature":"??","count":6}],"shop_type_share":[{"shop_type":"flagship","count":12}]}}',
+        encoding="utf-8",
+    )
+
+    import app.bot.server as server_module
+    monkeypatch.setattr(server_module, "DASHBOARD_PATH", dashboard_file)
+
+    client = TestClient(app)
+    response = client.get("/dashboard/summary")
+
+    assert response.status_code == 200
+    assert response.json()["summary"]["total"] == 12
+    assert response.json()["charts"]["brand_top"][0]["brand"] == "midea"

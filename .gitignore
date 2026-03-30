@@ -13,3 +13,5 @@ data/jd_dom_*.json
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+test-results/
+pytest-cache-files-*/
